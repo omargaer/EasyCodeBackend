@@ -20,7 +20,7 @@ async def update_rates(session, base_currency_id, rates_dict, code_to_id):
             ExchangeRate.date == today
         )
         result = await session.execute(stmt)
-        existing = result.scalar_one_or_none()
+        existing = result.scalars().first()
 
         if existing:
             # Обновляем существующую запись

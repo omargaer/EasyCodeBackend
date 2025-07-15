@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Обмен валют — Currency Converter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #181924;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .converter-container {
+      background: #23243a;
+      padding: 40px 30px 30px 30px;
+      border-radius: 18px;
+      box-shadow: 0 10px 32px 0 rgba(0,0,0,.20);
+      min-width: 340px;
+      max-width: 96vw;
+    }
+    .converter-title {
+      font-size: 1.5rem;
+      text-align: center;
+      margin-bottom: 24px;
+      letter-spacing: 1px;
+      font-weight: 600;
+    }
+    .converter-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .autocomplete-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .autocomplete-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 1rem;
+      border: 1.5px solid #44465b;
+      border-radius: 8px;
+      background: #292c44;
+      color: #ececec;
+      outline: none;
+    }
+
+    .autocomplete-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 2px;
+      background: #23243a;
+      border: 1.5px solid #44465b;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      max-height: 180px;
+      overflow-y: auto;
+      list-style: none;
+      padding: 0;
+      z-index: 100;
+      display: none;
+    }
+
+    .autocomplete-list li {
+      padding: 9px 14px;
+      cursor: pointer;
+      color: #ececec;
+    }
+
+    .autocomplete-list li:hover,
+    .autocomplete-list li.active {
+      background-color: #37437d;
+    }
+
+    .amount-input {
+      width: 100px;
+      min-width: 70px;
+      max-width: 140px;
+      font-size: 1rem;
+      padding: 8px 9px;
+      text-align: center;
+      border-radius: 8px;
+      border: 1.5px solid #44465b;
+      background: #292c44;
+      color: #ececec;
+      transition: border .16s;
+      box-sizing: border-box;
+      height: 44px;
+    }
+
+    .amount-input::-webkit-outer-spin-button,
+    .amount-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .amount-input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+
+    .amount-input:focus {
+      border-color: #4fbb81;
+      outline: none;
+    }
+
+    @media (max-width: 520px) {
+      .converter-container { padding: 20px 5vw; min-width: 0; }
+      .converter-row { flex-direction: column; gap: 12px; }
+      .amount-input { width: 100%; min-width: 60px; }
+    }
+
+    .result-row {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 1.1rem;
+      color: #4fbb81;
+      font-weight: 500;
+    }
+
+    .convert-btn {
+      margin-left: auto; margin-right: auto;
+      margin-top: 12px;
+      display: block;
+      background: linear-gradient(90deg, #4fbb81 0%, #36bccb 100%);
+      color: #15171f;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 28px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px 0 rgba(30,255,170,0.06);
+      transition: background .17s, color .17s;
+    }
+    .convert-btn:active {
+      color: #fff;
+      background: linear-gradient(90deg, #36bccb 0%, #4fbb81 100%);
+    }
+  </style>
+</head>
+<body>
+<div class="converter-container">
+  <div class="converter-title">Конвертация валют</div>
+  <div class="converter-row">
+    <div class="autocomplete-wrapper" data-index="from">
+      <input type="text" class="autocomplete-input" placeholder="Из валюты (USD, EUR...)" autocomplete="off">
+      <ul class="autocomplete-list"></ul>
+    </div>
+
+    <input type="number" id="amount" class="amount-input" min="0" max="1000000000" value="1000" step="0.01" inputmode="decimal">
+
+    <div class="autocomplete-wrapper" data-index="to">
+      <input type="text" class="autocomplete-input" placeholder="В валюту (USD, EUR...)" autocomplete="off">
+      <ul class="autocomplete-list"></ul>
+    </div>
+  </div>
+  <button class="convert-btn" id="convert-btn">Конвертировать</button>
+  <div class="result-row" id="result"></div>
+</div>
+
+<script>
+  let currencies = ["USD", "EUR", "RUB"];
+
+  async function fetchCurrencies() {
+  try {
+    const resp = await fetch("/api/v1/currencies/codes");
+    const data = await resp.json();
+    if (Array.isArray(data)) {
+      currencies = data;
+    }
+  } catch (err) {
+    console.warn("Ошибка загрузки валют. Используется заглушка.");
+    currencies = ["USD", "EUR", "RUB"];
+  }
+
+  document.querySelectorAll(".autocomplete-wrapper").forEach(setupAutocomplete);
+}
+
+
+  fetchCurrencies();
+
+  function setupAutocomplete(wrapper) {
+    const input = wrapper.querySelector('input');
+    const list = wrapper.querySelector('ul');
+    let currentFocus = -1;
+
+    input.addEventListener('input', () => showList(input.value));
+    input.addEventListener('focus', () => showList(input.value));
+    input.addEventListener('keydown', (e) => {
+      const items = list.querySelectorAll('li');
+      if (e.key === 'ArrowDown') {
+        currentFocus = (currentFocus + 1) % items.length;
+        setActive(items);
+        e.preventDefault();
+      } else if (e.key === 'ArrowUp') {
+        currentFocus = (currentFocus - 1 + items.length) % items.length;
+        setActive(items);
+        e.preventDefault();
+      } else if (e.key === 'Enter') {
+        if (currentFocus >= 0 && items[currentFocus]) {
+          input.value = items[currentFocus].innerText;
+          closeList();
+          input.blur();
+        }
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!wrapper.contains(e.target)) {
+        closeList();
+      }
+    });
+
+    function setActive(items) {
+      items.forEach((el) => el.classList.remove('active'));
+      if (items[currentFocus]) {
+        items[currentFocus].classList.add('active');
+      }
+    }
+
+    function showList(val) {
+      const filtered = currencies.filter(code => code.toUpperCase().includes(val.toUpperCase())).slice(0, 20);
+      list.innerHTML = '';
+      if (filtered.length === 0) {
+        closeList();
+        return;
+      }
+      filtered.forEach(code => {
+        const li = document.createElement('li');
+        li.textContent = code;
+        li.addEventListener('mousedown', () => {
+          input.value = code;
+          closeList();
+          input.blur();
+        });
+        list.appendChild(li);
+      });
+      list.style.display = 'block';
+      currentFocus = -1;
+    }
+
+    function closeList() {
+      list.style.display = 'none';
+      list.innerHTML = '';
+      currentFocus = -1;
+    }
+  }
+
+  document.getElementById('amount').addEventListener('input', function () {
+    this.style.width = ((this.value.length + 2) * 15) + 'px';
+  });
+
+  async function convertCurrency() {
+    const from = document.querySelector('.autocomplete-wrapper[data-index="from"] input').value.trim().toUpperCase();
+    const to   = document.querySelector('.autocomplete-wrapper[data-index="to"] input').value.trim().toUpperCase();
+    const amount = document.getElementById('amount').value;
+    const resultRow = document.getElementById('result');
+
+    if (!currencies.includes(from) || !currencies.includes(to)) {
+      resultRow.textContent = 'Неверный код валюты!';
+      return;
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      resultRow.textContent = 'Введите сумму больше 0';
+      return;
+    }
+
+    resultRow.textContent = 'Конвертация...';
+    try {
+      const resp = await fetch('/api/v1/convert', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ from_currency: from, to_currency: to, amount: parseFloat(amount) })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        resultRow.textContent = `${parseFloat(amount).toLocaleString()} ${from} = ${data.result} ${to}`;
+      } else {
+        resultRow.textContent = data.detail || 'Ошибка';
+      }
+    } catch {
+      resultRow.textContent = 'Ошибка соединения с сервером';
+    }
+  }
+
+  document.getElementById('convert-btn').addEventListener('click', convertCurrency);
+  document.getElementById('amount').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') convertCurrency();
+  });
+</script>
+</body>
+</html>
